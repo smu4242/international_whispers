@@ -1,0 +1,100 @@
+<html>
+<head>
+</head>
+
+  <body>
+    Enter Yandex Api Key
+    (<a target="blank" href="https://translate.yandex.com/developers/keys">https://translate.yandex.com/developers/keys</a>, key will be saved in your browser): <br>
+    <input name="apikey" type="password" id="apikey" class="" size="50"/>
+    <br>
+    <br> Your message: <br>
+    <textarea name="message" type="text" id="message" class="" cols="50" rows="5"></textarea>
+    <br>
+    <br>
+    <input type="submit" value="Start" id="submit" onClick="handleSubmit()"></input>
+    <br>
+    <h1>International Whispers</h1>
+    Currently translating from English to German to French to Spanish and back to English.<br><br>
+    <div id="translations"></div>
+  </body>
+
+  <script src='lodash.core.min.js'></script>
+  <script>
+    window.key = null;
+    var xhr = new XMLHttpRequest();
+    var shouldWork = "withCredentials" in xhr;
+    xhr = null;
+    if (!shouldWork) {
+      alert("THIS WILL PROBABLY NOT WORK :(");
+    }
+
+
+    function setDuration(id, value) {
+      localStorage.setItem("rewardDuration_" + id, value);
+    }
+
+
+    function getDuration(id) {
+      return new Number(localStorage.getItem("rewardDuration_" + id)  || 15);
+    }
+
+
+    function onGetTranslation (langFrom,langTo) {
+      var json = this.responseText;
+      var obj = JSON.parse(json);
+      console.log("translation response:", obj);
+      window.translation[langTo] = obj.text[0];
+      renderTranslation(langTo);
+      if (langTo === "de") {
+        getTranslation(window.translation[langTo], "de", "fr");
+      } else if (langTo === "fr") {
+        getTranslation(window.translation[langTo], "fr", "es");
+      } else if (langTo === "es") {
+        getTranslation(window.translation[langTo], "es", "en");
+      } else {
+        // do nothing
+      }
+    }
+
+
+    function renderTranslation(langTo) {
+      var html = "<span>"+ window.translation[langTo] + "</span>";
+      var para = document.getElementById("translations")
+      var node = document.createElement("li");
+      node.innerHTML = html.replace("\n", "<br>");
+      para.appendChild(node);
+    }
+
+
+    function getTranslation(text, langFrom, langTo) {
+      var oReq = new XMLHttpRequest();
+      oReq.addEventListener("load", function() { onGetTranslation.call(this,langFrom,langTo);});
+      var lang = langFrom + "-" + langTo;
+      oReq.open("GET", "https://translate.yandex.net/api/v1.5/tr.json/translate?key=" + encodeURIComponent(window.key) + "&lang=" + lang + "&text=" + encodeURIComponent(text) );
+      oReq.send();
+    }
+
+
+    function handleSubmitWithValue(value, message) {
+      if (value != "" && value != null && message != "" && message != null) {
+        localStorage.setItem('apikey', value);
+        window.key = value;
+        window.translation = {};
+        getTranslation(message, "en", "de");
+      }
+    }
+
+    function handleSubmit() {
+      var apikey = document.getElementById('apikey').value;
+      var message = document.getElementById('message').value;
+      handleSubmitWithValue(apikey, message);
+    }
+
+    var oldapikey = localStorage.getItem('apikey');
+    if (oldapikey) {
+      document.getElementById('apikey').value = oldapikey;
+    }
+    handleSubmitWithValue(oldapikey);
+
+  </script>
+</html>
