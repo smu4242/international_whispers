@@ -5,4 +5,4 @@ because google is not allowing non-companies (i.e. people) to create accounts in
 
 Here's a screnshot:
 
-![screenshot](https://github.com/smu4242/international_whispers/blob/master/screenshot_chinese_whispers.png)
+![screenshot](https://github.com/smu4242/international_whispers/blob/master/screenshot_chinese_whispers2.png)
