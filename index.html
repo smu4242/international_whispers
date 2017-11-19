@@ -29,29 +29,27 @@ it blew my baby blocks out of order.
     <div id="translations"></div>
   </body>
 
+  <!-- actually we do not use lodash right now... -->
   <script src='lodash.core.min.js'></script>
+
   <script>
-    window.key = null;
-    var xhr = new XMLHttpRequest();
-    var shouldWork = "withCredentials" in xhr;
-    xhr = null;
-    if (!shouldWork) {
-      alert("THIS WILL PROBABLY NOT WORK :(");
+
+
+    // make a request to yandex for one translation:
+    function getTranslation(text, langFrom, langTo) {
+      var oReq = new XMLHttpRequest();
+      oReq.addEventListener("load",
+        function() {
+          onGetTranslation.call(this, langFrom, langTo);
+        }
+      );
+      var lang = langFrom + "-" + langTo;
+      var url = "https://translate.yandex.net/api/v1.5/tr.json/translate?key=" + encodeURIComponent(window.key) + "&lang=" + lang + "&text=" + encodeURIComponent(text);
+      oReq.open("GET", url);
+      oReq.send();
     }
 
-
-    function setDuration(id, value) {
-      localStorage.setItem("rewardDuration_" + id, value);
-    }
-
-
-    function getDuration(id) {
-      return new Number(localStorage.getItem("rewardDuration_" + id)  || 15);
-    }
-
-
-    var stop = false;
-
+    // this is called when yandex returns one translation for us:
     function onGetTranslation (langFrom,langTo) {
       var json = this.responseText;
       var obj = JSON.parse(json);
@@ -63,24 +61,157 @@ it blew my baby blocks out of order.
         // last translation already done!
         return;
       }
+      // iterate over active languages until we find the one that comes next:
       for (var i in languagesOn) {
         var ii = new Number(i);
-        var x = languagesOn[ii];
-        var y = languagesOn[ii+1];
+        var currentLang = languagesOn[ii];
+        var nextLang = languagesOn[ii+1];
         if (ii+1 >= languagesOn.length) {
-          // last translation goes back to the first
+          // last translation found! we need to stop after this one:
           stop = true;
           getTranslation(window.translation[langTo], languagesOn[languagesOn.length-1], languagesOn[0]);
           return;
         }
-        if (langTo === x) {
-          getTranslation(window.translation[langTo], x, y);
+        if (langTo === currentLang) {
+          // found the next language, so translate it:
+          getTranslation(window.translation[langTo], currentLang, nextLang);
           return;
         }
       }
 
     }
 
+    // these are the currently selected languages:
+    window.languagesOn = ["en", "fr", "de", "az", "af"];
+    // these are the currently not selected languages:
+    window.languagesOff = [];
+
+    // updates window.languagesOff so that it contains all languages that are
+    // not in window.languagesOn
+    function fillOff() {
+      var l;
+      for (l in languageName) {
+        if (languagesOn.indexOf(l) == -1) {
+          languagesOff.push(l);
+        }
+      }
+    }
+
+    // removes all children from an dom element
+    // i.e. <div><span><i>hello</i></span></div>
+    // becomes <div></div>
+    function removeAllChildren(parent) {
+      var children = parent.childNodes;
+      for (var i = children.length-1; i >= 0 ; i--) {
+        var child = children[i];
+        parent.removeChild(child);
+      }
+    }
+
+
+    // select a language to be translated
+    function activate(lang) {
+        console.info("activate:", lang);
+        languagesOn.push(lang)
+        var index = languagesOff.indexOf(lang)
+        languagesOff.splice(index, 1);
+        renderOn();
+        renderOff();
+    }
+
+    // remove a language so that it's not used for translation
+    function deactivate(lang) {
+        console.info("deactivate:", lang);
+        languagesOff.push(lang)
+        var index = languagesOn.indexOf(lang)
+        languagesOn.splice(index, 1);
+        renderOn();
+        renderOff();
+    }
+
+
+    // display the languges that are currently selected:
+    function renderOn() {
+      var parent = document.getElementById("languages_on");
+      removeAllChildren(parent);
+      var node = document.createElement("div");
+      node.innerHTML = "<h3>Active Languages (Click to remove!)</h3>";
+      parent.appendChild(node);
+      for (var i in languagesOn) {
+        var on = languagesOn[i];
+        var langName = languageName[on];
+        var x = "'" + on + "'";
+        var deac = "deactivate(" + x + ")";
+        console.info(deac);
+        var html = "<span title='" + langName + "' onClick=" + deac + ">" + on + "</span> ";
+        var node = document.createElement("li");
+        node.innerHTML = html.replace("\n", "<br>");
+        parent.appendChild(node);
+      }
+    }
+
+
+    // render the languagues that are currently not selected:
+    function renderOff() {
+      var parent = document.getElementById("languages_off");
+      removeAllChildren(parent);
+      var node = document.createElement("div");
+      node.innerHTML = "<h3>Possible Languages (Click to add!)</h3>";
+      parent.appendChild(node);
+      for (var i in languagesOff) {
+        var off = languagesOff[i];
+        var langName = languageName[off];
+        var x = "'" + off + "'";
+        var ac = "activate(" + x + ")";
+        var html = "<span title='" + langName + "' onClick=" + ac + ">" + off + "</span> ";
+        var node = document.createElement("span");
+        node.innerHTML = html.replace("\n", "<br>");
+        parent.appendChild(node);
+      }
+    }
+
+    // render the translated sentence as html:
+    function renderTranslation(langFrom, langTo) {
+      var langFromName = languageName[langFrom];
+      var langToName = languageName[langTo];
+      var hint = "(from <span title='"+ langFromName + "'>" + langFrom + "</span> to <span title='"+ langToName + "'>" + langTo + "</span>) ";
+      var html = "<span>"+ hint + window.translation[langTo] + "</span>";
+      var para = document.getElementById("translations")
+      var node = document.createElement("li");
+      node.innerHTML = html.replace("\n", "<br>");
+      para.appendChild(node);
+    }
+
+
+    // save the apikey in localStorage so that we do not have to enter it again
+    // then get translation
+    function handleSubmitWithValue(key, message) {
+      if (key != "" && key != null && message != "" && message != null) {
+        localStorage.setItem('apikey', key);
+        window.key = key;
+        // initialize window.translation which will later be a map of language keys to translated text:
+        window.translation = {};
+        stop = false;
+        // remove all old translations:
+        removeAllChildren(document.getElementById("translations"));
+        // get translation from first to second language:
+        getTranslation(message, languagesOn[0], languagesOn[1]);
+      }
+    }
+
+    function handleSubmit() {
+      // read api key from text input:
+      var apikey = document.getElementById('apikey').value;
+      // read message from other text input:
+      var message = document.getElementById('message').value;
+      handleSubmitWithValue(apikey, message);
+    }
+
+    // initializations:
+
+    // All the languages that yandex supports.
+    // Note that when yandex adds a language, we need to add it here too to support it (but it wouldn't break anything if we didn't).
+    // Also note that when yandex removes a language, and we do not remove it, we will probably explode or something.
     var languageName = {
       "az": "Azerbaijan",
       "ml": "Malayalam",
@@ -177,16 +308,17 @@ it blew my baby blocks out of order.
       "ms": "Malay"
     };
 
-    window.languagesOn = ["en", "fr", "de", "az", "af"];
-    window.languagesOff = [];
 
-    function fillOff() {
-      var l;
-      for (l in languageName) {
-        if (languagesOn.indexOf(l) == -1) {
-          languagesOff.push(l);
-        }
-      }
+    // This is false while we are in the process of getting translations.
+    // Once we got the last translation it is set to false again.
+    var stop = false;
+
+    window.key = null;
+    var xhr = new XMLHttpRequest();
+    var shouldWork = "withCredentials" in xhr;
+    xhr = null;
+    if (!shouldWork) {
+      alert("THIS WILL PROBABLY NOT WORK :(");
     }
 
     fillOff();
@@ -197,113 +329,10 @@ it blew my baby blocks out of order.
     renderOff();
 
 
-    function removeAllChildren(parent) {
-      var children = parent.childNodes;
-      for (var i = children.length-1; i >= 0 ; i--) {
-        var child = children[i];
-        parent.removeChild(child);
-      }
-    }
-
-
-    function activate(lang) {
-        console.info("activate:", lang);
-        languagesOn.push(lang)
-        var index = languagesOff.indexOf(lang)
-        languagesOff.splice(index, 1);
-        renderOn();
-        renderOff();
-    }
-
-
-    function deactivate(lang) {
-        console.info("deactivate:", lang);
-        languagesOff.push(lang)
-        var index = languagesOn.indexOf(lang)
-        languagesOn.splice(index, 1);
-        renderOn();
-        renderOff();
-    }
-
-
-    function renderOn() {
-      var parent = document.getElementById("languages_on");
-      removeAllChildren(parent);
-      var node = document.createElement("div");
-      node.innerHTML = "<h3>Active Languages (Click to remove!)</h3>";
-      parent.appendChild(node);
-      for (var i in languagesOn) {
-        var on = languagesOn[i];
-        var langName = languageName[on];
-        var x = "'" + on + "'";
-        var deac = "deactivate(" + x + ")";
-        console.info(deac);
-        var html = "<span title='" + langName + "' onClick=" + deac + ">" + on + "</span> ";
-        var node = document.createElement("li");
-        node.innerHTML = html.replace("\n", "<br>");
-        parent.appendChild(node);
-      }
-    }
-
-
-    function renderOff() {
-      var parent = document.getElementById("languages_off");
-      removeAllChildren(parent);
-      var node = document.createElement("div");
-      node.innerHTML = "<h3>Possible Languages (Click to add!)</h3>";
-      parent.appendChild(node);
-      for (var i in languagesOff) {
-        var off = languagesOff[i];
-        var langName = languageName[off];
-        var x = "'" + off + "'";
-        var ac = "activate(" + x + ")";
-        var html = "<span title='" + langName + "' onClick=" + ac + ">" + off + "</span> ";
-        var node = document.createElement("span");
-        node.innerHTML = html.replace("\n", "<br>");
-        parent.appendChild(node);
-      }
-    }
-
-
-    function renderTranslation(langFrom, langTo) {
-      var langFromName = languageName[langFrom];
-      var langToName = languageName[langTo];
-      var hint = "(from <span title='"+ langFromName + "'>" + langFrom + "</span> to <span title='"+ langToName + "'>" + langTo + "</span>) ";
-      var html = "<span>"+ hint + window.translation[langTo] + "</span>";
-      var para = document.getElementById("translations")
-      var node = document.createElement("li");
-      node.innerHTML = html.replace("\n", "<br>");
-      para.appendChild(node);
-    }
-
-
-    function getTranslation(text, langFrom, langTo) {
-      var oReq = new XMLHttpRequest();
-      oReq.addEventListener("load", function() { onGetTranslation.call(this,langFrom,langTo);});
-      var lang = langFrom + "-" + langTo;
-      oReq.open("GET", "https://translate.yandex.net/api/v1.5/tr.json/translate?key=" + encodeURIComponent(window.key) + "&lang=" + lang + "&text=" + encodeURIComponent(text) );
-      oReq.send();
-    }
-
-
-    function handleSubmitWithValue(value, message) {
-      if (value != "" && value != null && message != "" && message != null) {
-        localStorage.setItem('apikey', value);
-        window.key = value;
-        window.translation = {};
-        stop = false;
-        getTranslation(message, languagesOn[0], languagesOn[1]);
-      }
-    }
-
-    function handleSubmit() {
-      var apikey = document.getElementById('apikey').value;
-      var message = document.getElementById('message').value;
-      handleSubmitWithValue(apikey, message);
-    }
-
+    // initially, we once check the localStorage if it has the api key:
     var oldapikey = localStorage.getItem('apikey');
     if (oldapikey) {
+      // and update the text input if so:
       document.getElementById('apikey').value = oldapikey;
     }
     handleSubmitWithValue(oldapikey);
